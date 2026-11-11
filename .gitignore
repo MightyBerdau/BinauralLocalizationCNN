@@ -1,0 +1,11 @@
+# Python environment and caches
+.venv/
+__pycache__/
+*.pyc
+
+# Large local data (download / generate separately, see README_extended.md)
+weights/
+*.tfrecords
+
+# Paper PDF (publisher copyright; cite via doi:10.1038/s41562-021-01244-z)
+*.pdf
