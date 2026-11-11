@@ -70,7 +70,7 @@ def tf_record_CNN_spherical(tone_version,itd_tones,ild_tones,manually_added,freq
     localization_bin_resolution=5
 
     #Optimization Params
-    batch_size=16
+    batch_size=int(os.environ.get("BATCH_SIZE", 16))  # local: overridable for low-memory CPU runs
     learning_rate = 1e-3
     loss_exponent = 12
     loss_scale = 2**loss_exponent
@@ -295,7 +295,7 @@ def tf_record_CNN_spherical(tone_version,itd_tones,ild_tones,manually_added,freq
             new_dataset = new_dataset.map(lambda x,y: combine_signal_and_noise_stacked_channel(x,y,0,48000,8000,post_rectify=True))
         else:
             new_dataset = new_dataset.map(lambda x,y: combine_signal_and_noise(x,y,0,48000,8000,post_rectify=True))
-        batch_sizes = tf.constant(16,dtype=tf.int64)
+        batch_sizes = tf.constant(batch_size,dtype=tf.int64)
         new_dataset = new_dataset.shuffle(buffer_size=200).batch(batch_size=batch_sizes,drop_remainder=True)
         #combined_iter = new_dataset.make_one_shot_iterator()
         combined_iter = new_dataset.make_initializable_iterator()
@@ -377,9 +377,13 @@ def tf_record_CNN_spherical(tone_version,itd_tones,ild_tones,manually_added,freq
         # make the downsample tensor
         downsample_filter_tensor = make_downsample_filt_tensor(current_rate, new_rate,
                                                                 window_size, pycoch_downsamp=False)
-        downsampled_signal  = tf.nn.conv2d(signal, downsample_filter_tensor,
-                                           strides=[1, 1, downsample, 1], padding='SAME',
-                                           name='conv2d_cochleagram_raw')
+        # Local CPU change: convolve one example at a time. The full-batch CPU
+        # conv2d with this 4097-tap filter exhausts memory and aborts; the
+        # per-example result is numerically identical.
+        downsampled_signal = tf.map_fn(
+            lambda s: tf.nn.conv2d(tf.expand_dims(s, 0), downsample_filter_tensor,
+                                   strides=[1, 1, downsample, 1], padding='SAME')[0],
+            signal, parallel_iterations=1, name='conv2d_cochleagram_raw')
         if post_rectify:
             downsampled_signal = tf.nn.relu(downsampled_signal)
         
@@ -609,7 +613,9 @@ def tf_record_CNN_spherical(tone_version,itd_tones,ild_tones,manually_added,freq
     # Initializing the variables
     #
     # Check_op seems to take up a lot of space on the GPU
-    check_op = tf.add_check_numerics_ops()
+    # Disabled locally: unused (only referenced in a commented-out line) and
+    # incompatible with the tf.map_fn used in downsample().
+    # check_op = tf.add_check_numerics_ops()
     
     
     init_op = tf.group(tf.global_variables_initializer(),

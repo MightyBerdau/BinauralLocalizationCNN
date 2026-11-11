@@ -73,7 +73,7 @@ filtered_vars = allvars_filtered()
 with open(newpath+'/config.json','w') as fp:
     json.dump(filtered_vars,fp)
 
-config_array=np.load(newpath+'/config_array.npy')
+config_array=np.load(newpath+'/config_array.npy', allow_pickle=True)
 
 files=(glob.glob(newpath+'/*'))
 files_filtered = [f for f in files if ".json" not in f]
