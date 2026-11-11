@@ -15,6 +15,11 @@ The original code was written to run on a GPU computing cluster (SLURM jobs insi
 with TensorFlow 1.13). **This fork aims to make the pretrained networks run on an ordinary Windows PC without
 a GPU and without an HPC environment.** It has only been tested for **testing/prediction**, not for training.
 
+> **Work in progress:** a new inference package (`python -m blcnn predict AUDIO_DIR`) that takes binaural
+> `.wav` files directly is being built in `src/blcnn/`; the original code now lives in `legacy/`. See
+> [ROADMAP.md](ROADMAP.md) for the plan, status and open questions. This README still describes the legacy
+> workflow and will be rewritten.
+
 ## Table of contents
 
 - [Purpose](#purpose)
