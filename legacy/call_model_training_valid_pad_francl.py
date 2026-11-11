@@ -66,6 +66,11 @@ if regularizer is None:
 else:
     newpath= model_path+'/arch_number_'+str(arch_ID)+'_init_'+str(init)+'_reg'
 
+# Local change: also accept the folder names of the published weights
+# download (net1 ... net10) when no arch_number_* folder exists.
+if testing and not os.path.exists(newpath) and os.path.isdir(model_path+'/net'+str(arch_ID)):
+    newpath = model_path+'/net'+str(arch_ID)
+
 if not os.path.exists(newpath):
     os.mkdir(newpath)
 

@@ -62,7 +62,7 @@ Check: `py -0p` should list `-V:3.7  ...\Python37\python.exe` (not `3.7-32`).
 [pyproject.toml](pyproject.toml) declares the required Python version (3.7) and the direct dependencies:
 TensorFlow 1.15.5 (CPU) and compatible versions of numpy, scipy, protobuf, etc. Don't upgrade these
 packages; newer versions break TensorFlow 1.15. The optional `analysis` extra (pandas, seaborn,
-scikit-learn) is only needed for the scripts in [analysis_and_plotting/](analysis_and_plotting/).
+scikit-learn) is only needed for the scripts in [analysis_and_plotting/](legacy/analysis_and_plotting/).
 
 From the repository root, in Git Bash, either with [uv](https://docs.astral.sh/uv/) (recommended):
 
@@ -101,13 +101,12 @@ This should print `1.15.5`. TensorFlow also prints many deprecation warnings, an
 1. Download the weights from the
    [Dropbox link](https://www.dropbox.com/sh/af6vaotxt41i7pe/AACfTzMxMLfv-Edmn33S4gTpa?dl=0).
    You get a zip containing folders `net1` … `net10`.
-2. The code expects folders named **`arch_number_<N>_init_0`**, not `net<N>`. Extract the network(s) you
-   need into `weights/` and rename them. For example, for net1:
+2. Extract the network(s) you need into `weights/`, keeping the folder names (`net1`, `net2`, …).
+   For example, for net1:
 
    ```sh
    mkdir -p weights
    unzip -q "Binaural Localization Net Weights.zip" "net1/*" -d weights
-   mv weights/net1 weights/arch_number_1_init_0
    ```
 
    Each folder must contain `config_array.npy` and `model.ckpt-100000.*`.
@@ -143,7 +142,7 @@ cochleagram settings in BinauralDataGen's `cochleagram_wrapper()`.
    needed.
 3. **Scale the 2-s stereo signal to an RMS of 0.1**, using one common factor for both ears so the level
    difference between them is kept.
-4. **Compute subbands for each ear** with the [pycochleagram](pycochleagram/) included in this repo:
+4. **Compute subbands for each ear** with the [pycochleagram](legacy/pycochleagram/) included in this repo:
    ```python
    from pycochleagram import cochleagram as cgm
    sub = cgm.human_cochleagram(ear, 48000, low_lim=30, hi_lim=20000, sample_factor=1,
@@ -158,7 +157,7 @@ cochleagram settings in BinauralDataGen's `cochleagram_wrapper()`.
    so you can match predictions to files (the output order is shuffled).
 7. **Background set:** in a separate folder, with **at least as many records as stimuli**. The records need
    `train/azim`/`train/elev` and a non-zero RMS. With SNR = 80 dB a near-silent signal is fine; see
-   [make_test_tfrecords.py](make_test_tfrecords.py) for an example of both record types.
+   [make_test_tfrecords.py](legacy/make_test_tfrecords.py) for an example of both record types.
 
 Make the number of stimuli a multiple of `BATCH_SIZE`, because an incomplete last batch is dropped.
 
@@ -174,7 +173,7 @@ Make the number of stimuli a multiple of `BATCH_SIZE`, because an incomplete las
   elevation are not meaningful):
 
   ```sh
-  .venv/Scripts/python.exe make_test_tfrecords.py test_data
+  .venv/Scripts/python.exe legacy/make_test_tfrecords.py test_data
   ```
 
   This writes `test_data/lateral_noise/` (32 noise bursts at 8 left/right angles) and `test_data/bkgd/`,
@@ -184,11 +183,11 @@ Make the number of stimuli a multiple of `BATCH_SIZE`, because an incomplete las
 
 ### Configure and run
 
-Edit the variables at the top of [run_test_local.sh](run_test_local.sh):
+Edit the variables at the top of [run_test_local.sh](legacy/run_test_local.sh):
 
 | variable | meaning |
 |---|---|
-| `model_path` | folder containing the `arch_number_<N>_init_0` folders (default `weights`) |
+| `model_path` | folder containing the `net<N>` folders (default `weights`; the original `arch_number_<N>_init_0` names also work) |
 | `arch_ID` | which network to use (`1` = net1) |
 | `model_version` | checkpoint number (`100000`) |
 | `train_path_pattern` | the sounds to localize |
@@ -199,14 +198,14 @@ Edit the variables at the top of [run_test_local.sh](run_test_local.sh):
 Use forward slashes in all paths. Then run, from the repo root:
 
 ```sh
-sh run_test_local.sh
+sh legacy/run_test_local.sh
 ```
 
 The defaults run net1 on the synthetic test set, which takes about 30 s on CPU.
 
 ### Output files
 
-The results are written **into the network's folder**, e.g. `weights/arch_number_1_init_0/`
+The results are written **into the network's folder**, e.g. `weights/net1/`
 (`<stim>` is the name of the folder containing the input TFRecords):
 
 | file | content |
@@ -219,7 +218,7 @@ The results are written **into the network's folder**, e.g. `weights/arch_number
 
 ```python
 import numpy as np
-data = np.load("weights/arch_number_1_init_0/batch_conditional_lateral_noise_iter100000.npy",
+data = np.load("weights/net1/batch_conditional_lateral_noise_iter100000.npy",
                allow_pickle=True)
 for probs, labels in data:
     c = int(np.argmax(probs))
@@ -242,38 +241,40 @@ and a synthetic left/right test, not from the authors' documentation.
 
 | path | description |
 |---|---|
-| [call_model_training_valid_pad_francl.py](call_model_training_valid_pad_francl.py) | main entry point: parses the experiment parameters, validates the model folder and starts training/testing |
-| [tf_record_CNN_spherical_gradcheckpoint_valid_pad.py](tf_record_CNN_spherical_gradcheckpoint_valid_pad.py) | data pipeline, network construction and train/test loop |
-| [NetBuilder_valid_pad.py](NetBuilder_valid_pad.py) | builds the network from `config_array.npy` |
-| [run_test_local.sh](run_test_local.sh) | **local** test/prediction script (this fork) |
-| [make_test_tfrecords.py](make_test_tfrecords.py) | generates a synthetic test set (this fork) |
+| [call_model_training_valid_pad_francl.py](legacy/call_model_training_valid_pad_francl.py) | main entry point: parses the experiment parameters, validates the model folder and starts training/testing |
+| [tf_record_CNN_spherical_gradcheckpoint_valid_pad.py](legacy/tf_record_CNN_spherical_gradcheckpoint_valid_pad.py) | data pipeline, network construction and train/test loop |
+| [NetBuilder_valid_pad.py](legacy/NetBuilder_valid_pad.py) | builds the network from `config_array.npy` |
+| [run_test_local.sh](legacy/run_test_local.sh) | **local** test/prediction script (this fork) |
+| [make_test_tfrecords.py](legacy/make_test_tfrecords.py) | generates a synthetic test set (this fork) |
 | [pyproject.toml](pyproject.toml), [uv.lock](uv.lock) | Python version and dependencies; exact pinned versions in the lock file (this fork) |
-| [pycochleagram/](pycochleagram/) | cochlear filterbank used to create the model input |
-| [multi_source_training/](multi_source_training/) | code for the multi-source models (see its README.txt) |
-| [analysis_and_plotting/](analysis_and_plotting/) | analysis and plotting scripts from the original authors |
-| `slurm_*.sh`, `interactive_*.sh` | original cluster scripts (SLURM / Singularity) |
+| [pycochleagram/](legacy/pycochleagram/) | cochlear filterbank used to create the model input |
+| [multi_source_training/](legacy/multi_source_training/) | code for the multi-source models (see its README.txt) |
+| [analysis_and_plotting/](legacy/analysis_and_plotting/) | analysis and plotting scripts from the original authors |
+| `legacy/slurm_*.sh`, `legacy/interactive_*.sh` | original cluster scripts (SLURM / Singularity) |
 
 ## Changes compared to the original repository
 
-- [layer_generator.py](layer_generator.py): a placeholder. The module is imported but missing from the
+- [layer_generator.py](legacy/layer_generator.py): a placeholder. The module is imported but missing from the
   original repo, and it is never used.
-- [call_model_training_valid_pad_francl.py](call_model_training_valid_pad_francl.py):
+- [call_model_training_valid_pad_francl.py](legacy/call_model_training_valid_pad_francl.py):
   `np.load(..., allow_pickle=True)` for `config_array.npy` (needed by the installed numpy version).
-- [tf_record_CNN_spherical_gradcheckpoint_valid_pad.py](tf_record_CNN_spherical_gradcheckpoint_valid_pad.py):
+- [tf_record_CNN_spherical_gradcheckpoint_valid_pad.py](legacy/tf_record_CNN_spherical_gradcheckpoint_valid_pad.py):
   - the first downsampling convolution now processes one example at a time. On CPU, the full-batch version
     exhausts memory and aborts. The results are identical.
   - the unused `tf.add_check_numerics_ops()` is disabled, because it doesn't work with the change above.
   - the batch size can be set with the `BATCH_SIZE` environment variable (default 16, as in the original).
-- New files: [run_test_local.sh](run_test_local.sh), [make_test_tfrecords.py](make_test_tfrecords.py),
+- The original code moved to [legacy/](legacy/); the entry script also accepts the weights' download
+  folder names (`net<N>`) in addition to `arch_number_<N>_init_0`.
+- New files: [run_test_local.sh](legacy/run_test_local.sh), [make_test_tfrecords.py](legacy/make_test_tfrecords.py),
   [pyproject.toml](pyproject.toml), [uv.lock](uv.lock), `.gitignore`.
 
 ## Running on a cluster (original setup)
 
-The original workflow is still included unchanged:
+The original workflow is still included in [legacy/](legacy/):
 
 - Example parameters for testing and training are in
-  [slurm_CNN_spherical_testing_francl.sh](slurm_CNN_spherical_testing_francl.sh) and
-  [slurm_CNN_spherical_training_francl.sh](slurm_CNN_spherical_training_francl.sh). Before running, change
+  [slurm_CNN_spherical_testing_francl.sh](legacy/slurm_CNN_spherical_testing_francl.sh) and
+  [slurm_CNN_spherical_training_francl.sh](legacy/slurm_CNN_spherical_training_francl.sh). Before running, change
   the model save folder to point to your directory with the model architecture config file, and the data
   folder to point to your data. The Python code itself contains no absolute paths.
 - The authors provide a [Singularity image](https://sylabs.io/singularity/) with all required packages
