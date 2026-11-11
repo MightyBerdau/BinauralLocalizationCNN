@@ -59,17 +59,33 @@ Check: `py -0p` should list `-V:3.7  ...\Python37\python.exe` (not `3.7-32`).
 
 ### 2. Create the virtual environment
 
-Dependencies are managed with [uv](https://docs.astral.sh/uv/). From the repository root, in Git Bash:
-
-```sh
-uv sync --python "$(py -3.7 -c 'import sys; print(sys.executable)')"
-```
-
-This creates `.venv` and installs exactly the versions recorded in [uv.lock](uv.lock).
 [pyproject.toml](pyproject.toml) declares the required Python version (3.7) and the direct dependencies:
 TensorFlow 1.15.5 (CPU) and compatible versions of numpy, scipy, protobuf, etc. Don't upgrade these
-packages; newer versions break TensorFlow 1.15. The `analysis` dependency group (pandas, seaborn,
-scikit-learn) is installed by default; skip it with `uv sync --no-group analysis`.
+packages; newer versions break TensorFlow 1.15. The optional `analysis` extra (pandas, seaborn,
+scikit-learn) is only needed for the scripts in [analysis_and_plotting/](analysis_and_plotting/).
+
+From the repository root, in Git Bash, either with [uv](https://docs.astral.sh/uv/) (recommended):
+
+```sh
+uv sync --extra analysis --python "$(py -3.7 -c 'import sys; print(sys.executable)')"
+```
+
+This creates `.venv` and installs exactly the versions recorded in [uv.lock](uv.lock), which uv
+generates from pyproject.toml (don't edit it by hand). Note: `uv sync` without `--extra analysis`
+removes the analysis packages again.
+
+Or with pip:
+
+```sh
+py -3.7 -m venv .venv
+.venv/Scripts/python.exe -m pip install --upgrade "pip<24.1"
+.venv/Scripts/python.exe -m pip install --default-timeout=300 ".[analysis]"
+```
+
+This installs only the dependencies (the repository itself is not a package). pip ignores
+[uv.lock](uv.lock), so packages that are not pinned in pyproject.toml may resolve to different versions.
+For the exact locked versions without uv, install from a requirements file exported by someone with uv
+(`uv export --all-extras --format requirements-txt > requirements.txt`) using `pip install -r requirements.txt`.
 
 Verify the installation:
 

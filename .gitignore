@@ -2,8 +2,9 @@
 .venv/
 __pycache__/
 *.pyc
+**/*.egg-info
 
-# Large local data (download / generate separately, see README_extended.md)
+# Large local data (download / generate separately, see README.md)
 weights/
 *.tfrecords
 
