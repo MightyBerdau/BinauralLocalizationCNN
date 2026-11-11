@@ -23,13 +23,12 @@ def check_if_display_exists():
   return havedisplay
 
 
-if check_if_display_exists():
-  from matplotlib.pyplot import imshow, show, plot
-else:
-  import matplotlib
-  matplotlib.use('Agg')
-  from matplotlib.pyplot import imshow, show, plot
-  warnings.warn('pycochleagram using non-interactive Agg matplotlib backend', RuntimeWarning, stacklevel=2)
+# blcnn change: the original probed for a display on import by running
+# os.system("python -c '...'") (a subprocess with whatever "python" is on PATH,
+# which fails on Windows) and then switched matplotlib to the Agg backend. blcnn
+# never plots, so pyplot is imported directly; matplotlib picks a headless
+# backend by itself when no display is available.
+from matplotlib.pyplot import imshow, show, plot
 
 
 ##### Public Helper Methods #####
