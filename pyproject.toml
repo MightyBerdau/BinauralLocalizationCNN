@@ -55,6 +55,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "weights: needs the network weights (slow; skipped if weights/ is missing)",
+]
 filterwarnings = [
     # harmless: pyfftw's compiled extension was built against a newer numpy
     "ignore:numpy.ufunc size changed:RuntimeWarning",
