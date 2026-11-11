@@ -1,6 +1,7 @@
-"""Command-line interface: ``blcnn predict AUDIO_DIR -o results.csv``."""
+"""Command-line interface: ``python -m blcnn predict AUDIO_DIR -o results.csv``."""
 
 import argparse
+import logging
 import sys
 
 from . import __version__
@@ -17,19 +18,51 @@ def build_parser():
     predict = sub.add_parser(
         "predict",
         help="predict source locations for a folder of binaural .wav files",
-        description="Predict the source location of each binaural .wav file in AUDIO_DIR. "
-                    "Each file should be 2 s long; the model judges its middle 1 s.")
+        description="Predict the source location of each binaural .wav file in AUDIO_DIR "
+                    "(searched recursively). Each file should be a 2-s stereo recording "
+                    "(left, right ear) at 48 kHz; the model judges its middle 1 s. Other "
+                    "sample rates are resampled, longer files are cropped to their first "
+                    "2 s and shorter ones zero-padded, with a warning in the output.")
     predict.add_argument("audio_dir", help="folder with binaural (stereo) .wav files")
     predict.add_argument("-o", "--output", default="predictions.csv",
-                         help="output CSV (default: %(default)s)")
+                         help="output CSV (default: %(default)s); skipped files are listed "
+                              "in <output>_errors.csv")
     predict.add_argument("--weights-dir", default="weights",
                          help="folder containing the net1 ... net10 folders "
                               "(default: %(default)s)")
     predict.add_argument("--nets", default="all",
-                         help="networks to use, e.g. '1,3,8' or 'all' (default: %(default)s)")
+                         help="networks to use, e.g. '1,3,8' or 'all' (default: %(default)s); "
+                              "with several networks, their probabilities are averaged")
     predict.add_argument("--device", choices=["cpu", "gpu"], default="cpu",
                          help="device to run on (default: %(default)s)")
+    predict.add_argument("--batch-size", type=int, default=None,
+                         help="files per forward pass (default: 1 on CPU, 16 on GPU)")
+    predict.add_argument("-q", "--quiet", action="store_true",
+                         help="only print warnings and errors")
     return parser
+
+
+def _predict(args):
+    from .audio import AudioError
+    from .predict import predict_folder
+    from .weights import WeightsError
+
+    if args.device == "gpu":
+        from .model import gpu_available
+        if not gpu_available():
+            logging.error("--device gpu requested, but TensorFlow sees no GPU")
+            return 1
+    batch_size = args.batch_size or (16 if args.device == "gpu" else 1)
+    if batch_size < 1:
+        logging.error("--batch-size must be at least 1")
+        return 1
+    try:
+        predict_folder(args.audio_dir, args.output, weights_dir=args.weights_dir,
+                       nets=args.nets, device=args.device, batch_size=batch_size)
+    except (WeightsError, FileNotFoundError, AudioError) as err:
+        logging.error("%s", err)
+        return 1
+    return 0
 
 
 def main(argv=None):
@@ -38,9 +71,10 @@ def main(argv=None):
     if args.command is None:
         parser.print_help()
         return 1
+    logging.basicConfig(level=logging.WARNING if args.quiet else logging.INFO,
+                        format="%(levelname)s: %(message)s")
     if args.command == "predict":
-        print("blcnn predict is not implemented yet.", file=sys.stderr)
-        return 2
+        return _predict(args)
     return 0
 
 
