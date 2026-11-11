@@ -17,6 +17,7 @@ dependencies = [
     "h5py==2.10.0",        # pycochleagram; h5py 3.x breaks TF 1.15 checkpoint/keras loading
     "protobuf==3.20.3",    # TF 1.15 fails with protobuf >= 4
     "toposort==1.10",      # legacy/memory_saving_gradients.py
+    "soundfile==0.13.1",   # blcnn audio input (24-bit WAV, FLAC); bundles libsndfile
 ]
 
 [project.scripts]
@@ -45,4 +46,16 @@ where = ["src"]
 environments = [
     "sys_platform == 'win32' and platform_machine == 'AMD64'",
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # harmless: pyfftw's compiled extension was built against a newer numpy
+    "ignore:numpy.ufunc size changed:RuntimeWarning",
 ]
