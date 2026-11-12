@@ -20,7 +20,7 @@ def build_parser():
         help="predict source locations for a folder of binaural .wav files",
         description="Predict the source location of each binaural .wav file in AUDIO_DIR "
                     "(searched recursively). Each file should be a 2-s stereo recording "
-                    "(left, right ear) at 48 kHz; the model judges its middle 1 s. Other "
+                    "(left, right ear) at 48 kHz; each network judges its middle 1 s. Other "
                     "sample rates are resampled, longer files are cropped to their first "
                     "2 s and shorter ones zero-padded, with a warning in the output.")
     predict.add_argument("audio_dir", help="folder with binaural (stereo) .wav files")
@@ -32,7 +32,7 @@ def build_parser():
                               "(default: %(default)s)")
     predict.add_argument("--nets", default="all",
                          help="networks to use, e.g. '1,3,8' or 'all' (default: %(default)s); "
-                              "with several networks, their probabilities are averaged")
+                              "the output has one row per file and network")
     predict.add_argument("--device", choices=["cpu", "gpu"], default="cpu",
                          help="device to run on (default: %(default)s)")
     predict.add_argument("--batch-size", type=int, default=None,

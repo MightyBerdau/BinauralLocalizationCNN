@@ -20,7 +20,7 @@ AZIMUTH_STEP = 5     # degrees
 ELEVATION_STEP = 10  # degrees
 AUDIO_EXTENSIONS = (".wav",)
 
-RESULT_COLUMNS = ["file", "azimuth_deg", "elevation_deg", "probability", "networks", "warnings"]
+RESULT_COLUMNS = ["file", "network", "azimuth_deg", "elevation_deg", "probability", "warnings"]
 ERROR_COLUMNS = ["file", "error"]
 
 
@@ -101,9 +101,11 @@ def _run_network(network_files, cache_dir, n_inputs, device, batch_size):
 
 def predict_folder(audio_dir, output_csv, weights_dir="weights", nets="all", device="cpu",
                    batch_size=1):
-    """Predict the source location of every .wav file in ``audio_dir``.
+    """Predict the source location of every .wav file in ``audio_dir`` with each network.
 
-    Writes ``output_csv`` (one row per usable file) and, if any file was skipped,
+    Each selected network judges each file on its own (its most probable location
+    bin); the networks are not combined. Writes ``output_csv`` (one row per usable
+    file and network, sorted by file, then network) and, if any file was skipped,
     ``<output>_errors.csv``. Returns the list of result rows.
     """
     networks = select_networks(weights_dir, nets)
@@ -121,27 +123,24 @@ def predict_folder(audio_dir, output_csv, weights_dir="weights", nets="all", dev
     try:
         usable, warnings, errors = _preprocess(audio_dir, files, cache_dir)
         rows = []
-        if usable:
-            summed = np.zeros((len(usable), 504))
-            for network_files in networks:
-                started = time.time()
-                summed += _run_network(network_files, cache_dir, len(usable), device,
-                                       batch_size)
-                log.info("network %d done in %.1f s", network_files.number,
-                         time.time() - started)
-            mean = summed / len(networks)
-            net_list = " ".join(str(n.number) for n in networks)
-            for rel_path, probs in zip(usable, mean):
+        for network_files in networks if usable else []:
+            started = time.time()
+            probabilities = _run_network(network_files, cache_dir, len(usable), device,
+                                         batch_size)
+            log.info("network %d done in %.1f s", network_files.number,
+                     time.time() - started)
+            for rel_path, probs in zip(usable, probabilities):
                 best = int(np.argmax(probs))
                 azimuth, elevation = decode_class(best)
                 rows.append({
                     "file": rel_path,
+                    "network": network_files.number,
                     "azimuth_deg": azimuth,
                     "elevation_deg": elevation,
-                    "probability": "{:.4f}".format(probs[best]),
-                    "networks": net_list,
+                    "probability": round(float(probs[best]), 4),
                     "warnings": "; ".join(warnings[rel_path]),
                 })
+        rows.sort(key=lambda row: (row["file"], row["network"]))
     finally:
         shutil.rmtree(cache_dir, ignore_errors=True)
 

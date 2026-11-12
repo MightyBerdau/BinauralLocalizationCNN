@@ -21,8 +21,8 @@ TFRecords themselves and was built for the authors' SLURM cluster, which makes i
 | files shorter than 2 s | zero-padded symmetrically to 2 s, with a warning |
 | files longer than 2 s | first 2 s used, with a warning |
 | mono / unreadable / silent files | skipped and listed in `<output>_errors.csv`; the run continues |
-| networks | user's choice, **default: all ten**; softmax probabilities averaged across the selected networks, then argmax (soft-voting ensemble). Deviates from the paper, which judges per network and averages *results* across networks (README, "How the predictions are computed") |
-| output | CSV with the top prediction per file |
+| networks | user's choice, **default: all ten**; each network predicts separately, blcnn does not combine them (users combine as they need, e.g. per-network analysis as in the paper). A probability-averaging ensemble was used before 2026-11-12 and dropped because the paper never combines networks per stimulus |
+| output | CSV in long format: one row per file and network (top location bin and its probability) |
 | weights | users unzip the authors' download into `weights/` and keep the folder names `net1` … `net10` |
 | interface | installable package `blcnn` with CLI (`python -m blcnn predict …`) and Python API |
 | original code | kept in `legacy/` (with CPU fixes), still runnable |
@@ -40,7 +40,7 @@ NetBuilder (see `src/blcnn/_vendor/README.md`). The legacy pipeline gives identi
 ### 2. CPU pipeline — done
 `python -m blcnn predict AUDIO_DIR -o predictions.csv [--nets all] [--device cpu|gpu]`.
 Audio → 2 s, RMS 0.1 → 39 subbands → middle 1 s → TF 1.15 graph (from a placeholder, no TFRecords or
-background records) → averaged probabilities → CSV. 30 unit tests (no weights needed).
+background records) → per-network top location → CSV (one row per file and network). 30 unit tests (no weights needed).
 All ten networks on CPU: 11 files in 83 s on a 16 GB Windows PC.
 
 ### 3. Equivalence with the original code — done (7 of 10 networks)
@@ -54,8 +54,9 @@ Same predicted class for all stimuli; max. probability difference 5e-7 … 3e-6 
 `python -m blcnn example [DIR]` writes nine 2-s pink-noise stimuli rendered with the MIT KEMAR HRIRs
 bundled in [slab](https://pypi.org/project/slab/) (optional extra `examples`) — the HRIR set the networks
 were trained with (paper, Methods, ref. 53). Locations cover left/right, front/back mirror pairs and
-elevations 0/20/60. The ten-network ensemble localizes all nine exactly; single networks (net1) miss the
-median-plane ones (azimuth 0/180). `tests/test_examples.py`.
+elevations 0/20/60. Every network localizes the six off-midline stimuli correctly (net6 and net8: 90 → 95);
+on the three median-plane ones (azimuth 0/180) the networks disagree in front/back and elevation.
+`tests/test_examples.py`.
 
 ### 4. GPU on a Linux server — not started
 Blocked: no server chosen yet. To do once one is available:
@@ -80,8 +81,6 @@ Blocked: no server chosen yet. To do once one is available:
 - **Sliding windows:** a time course of predictions over longer recordings.
 - **True labels:** optional CSV with true azimuth/elevation → error columns in the output.
 - **Full output distribution:** save the 504-way probabilities (e.g. `.npz`) for later analysis.
-- **Per-network results** in addition to the ensemble average (one run, all networks), so the paper's
-  per-network analysis doesn't need one `--nets N` run per network.
 - **Front–back folding** of azimuths, as used in the paper for frontal-only experiments.
 - **Plots** (e.g. predicted vs. true azimuth).
 - **Weights download/import command** with checksums.

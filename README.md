@@ -45,8 +45,10 @@ After [installation](#installation) (with the `examples` extra) and downloading 
 ```
 
 The first command writes nine binaural noise stimuli at known locations; the file names give the true
-location (`az150_el00.wav` = azimuth 150°, elevation 0°). The second predicts their locations with all ten
-networks (about 2 minutes on CPU) and writes them to `example_predictions.csv`. All nine should match.
+location (`az150_el00.wav` = azimuth 150°, elevation 0°). The second lets each of the ten networks predict
+their locations (about 2 minutes on CPU) and writes one row per file and network to
+`example_predictions.csv`. Off the midline, all networks should match the true locations (within 5°);
+straight ahead and behind (`az000_*`, `az180_*`), they disagree — see [Output](#output).
 
 ## Requirements
 
@@ -144,7 +146,7 @@ start on Windows with Python 3.7.
 | `AUDIO_DIR` | folder with binaural `.wav` files, searched recursively |
 | `-o`, `--output` | output CSV (default `predictions.csv`) |
 | `--weights-dir` | folder containing `net1` … `net10` (default `weights`) |
-| `--nets` | networks to use, e.g. `1,3,8` or `all` (default `all`); with several networks their output probabilities are averaged, see [How the predictions are computed](#how-the-predictions-are-computed) |
+| `--nets` | networks to use, e.g. `1,3,8` or `all` (default `all`); each network predicts separately, see [How the predictions are computed](#how-the-predictions-are-computed) |
 | `--device` | `cpu` (default) or `gpu` (untested) |
 | `--batch-size` | files per forward pass (default 1 on CPU, 16 on GPU) |
 | `-q`, `--quiet` | only print warnings and errors |
@@ -161,8 +163,8 @@ The pipeline follows the paper's test procedure (Methods):
   head/ear cues: recorded with in-ear microphones or a dummy head, or rendered with HRIRs/BRIRs. Ordinary
   stereo recordings or plain mono sounds are not meaningful input.
 - **2 s at 48 kHz per file.** The 2-s signal is scaled to an RMS of 0.1 (one factor for both ears),
-  converted into 39 cochlear subbands (30 Hz–20 kHz), and the network judges the **middle 1 s**. Each
-  file gets **one** predicted location.
+  converted into 39 cochlear subbands (30 Hz–20 kHz), and each network judges the **middle 1 s**. Each
+  network gives **one** predicted location per file.
 - Deviations are handled with a warning in the output: other sample rates are resampled to 48 kHz;
   longer files are cropped to their first 2 s; shorter files are zero-padded symmetrically to 2 s.
 - Files that cannot be used (unreadable, not stereo, silent) are skipped and listed in
@@ -170,16 +172,27 @@ The pipeline follows the paper's test procedure (Methods):
 
 ### Output
 
-One row per file:
+One row per file and network ("long" format), sorted by file, then network:
 
 | column | content |
 |---|---|
 | `file` | path relative to `AUDIO_DIR` |
-| `azimuth_deg` | predicted azimuth, 0–355° in 5° steps |
-| `elevation_deg` | predicted elevation, 0–60° in 10° steps |
-| `probability` | output probability of the predicted location (averaged over the networks) |
-| `networks` | networks used |
-| `warnings` | preprocessing warnings (resampled, cropped, padded) |
+| `network` | network number (1–10) |
+| `azimuth_deg` | azimuth predicted by this network, 0–355° in 5° steps |
+| `elevation_deg` | elevation predicted by this network, 0–60° in 10° steps |
+| `probability` | this network's output probability for the predicted location |
+| `warnings` | preprocessing warnings (resampled, cropped, padded); the same for all rows of a file |
+
+With `--nets all` and 20 files, the CSV has 200 rows. For example (excerpt from the example stimuli):
+
+```
+file,network,azimuth_deg,elevation_deg,probability,warnings
+az030_el00.wav,1,30,0,0.9996,
+az030_el00.wav,2,30,0,1.0,
+...
+az180_el00.wav,1,0,10,0.3337,
+az180_el00.wav,2,180,0,0.6092,
+```
 
 **Direction convention:** azimuth 0° = straight ahead, increasing **counterclockwise** seen from above:
 90° = left, 180° = behind, 270° = right. Elevation 0° = ear level, positive = up. The networks have
@@ -188,33 +201,27 @@ derived from the original label code and confirmed with the KEMAR example stimul
 front/back and elevation; see [ROADMAP.md](ROADMAP.md)).
 
 Locations in the median plane (straight ahead or behind) have no interaural differences and are harder.
-On the example stimuli, net1 alone mislocalizes all three median-plane sources, while the ten-network
-average gets them right.
+On the example stimuli, every network localizes the six off-midline sources correctly (two networks put
+90° at 95°), but the networks disagree on the three median-plane sources, in front/back as well as in
+elevation.
 
 ### How the predictions are computed
 
 Each network ends in a softmax layer with 504 units, one per location bin, and outputs a probability for
-every bin. For each file, blcnn:
+every bin. For each file, blcnn runs every selected network (`--nets`; default: all ten) on the same input
+and reports, **for each network separately**, the bin with the highest probability and that probability.
+blcnn does **not** combine the networks; how to combine them is up to you.
 
-1. runs every selected network (`--nets`; default: all ten) on the same input;
-2. **averages the 504 probabilities across the selected networks**, with equal weight;
-3. reports the bin with the **highest averaged probability** as `azimuth_deg`/`elevation_deg`, and that
-   averaged probability as `probability`.
+The paper treats the ten networks like participants in an experiment: each network makes its own
+judgement for each stimulus (the bin with the maximum softmax output), results such as localization errors
+or mean judged positions are computed **per network**, and the reported value is the mean across networks,
+with error bars bootstrapped across networks (Methods, "Psychophysical evaluation of model"; the ten
+networks together are what the paper calls "the model"). To analyse your data the same way, compute your
+measure per network from the `network` column, then average across networks.
 
-The rule is the same for every selection: with `--nets 1` the result is net1's own most probable bin;
-with `--nets 1,3,8` it is the average over these three networks only; with `all` the average over all ten.
-Different selections can therefore give different predictions for the same file.
-
-**This is not the procedure of the paper.** The paper treats the ten networks like participants in an
-experiment: each network makes its own judgement for each stimulus (the bin with the maximum softmax
-output), results such as localization errors or mean judged positions are computed **per network**, and
-the reported value is the mean across networks, with error bars bootstrapped across networks (Methods,
-"Psychophysical evaluation of model"). The paper never combines the networks into a single prediction per
-stimulus. blcnn's averaging of probabilities (a "soft-voting" ensemble) is a design choice of this fork to
-give one prediction per file; it can differ from what most individual networks judge.
-
-To analyse your data the way the paper did, run each network separately (`--nets 1`, `--nets 2`, …, one
-output file each), compute your measure per network, then average across networks.
+Note that averaging the predicted *angles* of one file across networks is not meaningful when networks
+disagree in front/back (e.g. 0° and 180° average to 90°); compute errors per network first, or
+front/back-fold the angles as the paper does for some analyses.
 
 ### Example stimuli: `blcnn example`
 
@@ -238,7 +245,7 @@ on every run. Needs the `examples` extra.
 from blcnn.predict import predict_folder
 
 rows = predict_folder("my_wavs", "predictions.csv", weights_dir="weights", nets="all")
-# rows: list of dicts with the CSV columns above (one per usable file)
+# rows: list of dicts with the CSV columns above (one per usable file and network)
 ```
 
 The building blocks can also be used directly: `blcnn.audio.prepare_signal` (load, resample, crop/pad,
@@ -259,8 +266,8 @@ Unit tests need no weights. Tests marked `weights` run only if `weights/` contai
 
 - [tests/test_equivalence.py](tests/test_equivalence.py) compares blcnn with the original testing code on
   the same input (same predicted class; probabilities differ by at most ~3e-6).
-- [tests/test_examples.py](tests/test_examples.py) checks that the networks localize the example stimuli
-  correctly (needs the `examples` extra).
+- [tests/test_examples.py](tests/test_examples.py) checks that each network localizes the off-midline
+  example stimuli correctly (needs the `examples` extra).
 
 ## Repository structure
 

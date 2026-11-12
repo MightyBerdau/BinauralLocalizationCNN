@@ -72,16 +72,26 @@ def _has_networks():
 @pytest.mark.skipif(not _has_networks(), reason="network weights not found in {} (nets {})"
                     .format(WEIGHTS_DIR, NETS))
 def test_predicts_true_locations(example_dir, tmp_path):
-    """The networks localize the KEMAR examples correctly, front/back and elevation included.
+    """Each network localizes the off-midline KEMAR examples correctly.
 
-    Also checks the azimuth convention of ``decode_class`` (0 = front, 90 = left).
-    Median-plane sources (azimuth 0 or 180) carry no ITD/ILD and single networks
-    misjudge them (net1: all three as azimuth 0, elevation 10); they are checked
-    only with the full ensemble, which gets all nine right.
+    Covers front/back (30 vs. 150, 330) and elevation (30/20), and so checks the
+    azimuth convention of ``decode_class`` (0 = front, 90 = left). Azimuth may be
+    off by one bin (net6 and net8 judge 90 as 95). Median-plane sources (azimuth
+    0 or 180) carry no ITD/ILD; the networks disagree on them (front/back and
+    elevation), so they are not checked.
     """
+    networks = select_networks(str(WEIGHTS_DIR), NETS)
     rows = predict_folder(str(example_dir), str(tmp_path / "pred.csv"),
                           weights_dir=str(WEIGHTS_DIR), nets=NETS)
-    predicted = {row["file"]: (row["azimuth_deg"], row["elevation_deg"]) for row in rows}
-    expected = {example_filename(az, el): (az, el) for az, el in EXAMPLE_LOCATIONS
-                if NETS == "all" or az not in (0, 180)}
-    assert {name: predicted[name] for name in expected} == expected
+    assert len(rows) == len(EXAMPLE_LOCATIONS) * len(networks)
+    predicted = {(row["file"], row["network"]): (row["azimuth_deg"], row["elevation_deg"])
+                 for row in rows}
+    for azimuth, elevation in EXAMPLE_LOCATIONS:
+        if azimuth in (0, 180):
+            continue
+        for network in networks:
+            pred_az, pred_el = predicted[(example_filename(azimuth, elevation), network.number)]
+            az_error = abs((pred_az - azimuth + 180) % 360 - 180)
+            assert az_error <= 5 and pred_el == elevation, \
+                "net{} judged az {} el {} as az {} el {}".format(
+                    network.number, azimuth, elevation, pred_az, pred_el)
