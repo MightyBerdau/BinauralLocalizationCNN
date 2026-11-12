@@ -50,6 +50,9 @@ analysis = [
     { name = "scikit-learn" },
     { name = "seaborn" },
 ]
+examples = [
+    { name = "slab" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -67,11 +70,12 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'analysis'", specifier = "==1.0.2" },
     { name = "scipy", specifier = "==1.4.1" },
     { name = "seaborn", marker = "extra == 'analysis'", specifier = "==0.12.2" },
+    { name = "slab", marker = "extra == 'examples'", specifier = "==1.8.2" },
     { name = "soundfile", specifier = "==0.13.1" },
     { name = "tensorflow", specifier = "==1.15.5" },
     { name = "toposort", specifier = "==1.10" },
 ]
-provides-extras = ["analysis"]
+provides-extras = ["analysis", "examples"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=7.4.4" }]
@@ -501,6 +505,35 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
+name = "slab"
+version = "1.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "sounddevice" },
+    { name = "soundfile" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a7/31/5117390bdfadb1eb02279d947b8e2796bedf1d577128e7825a1228b89e61/slab-1.8.2.tar.gz", hash = "sha256:e17917561646ffc12a48c4125ed32151f1373b0d37589f6c71133e300abb1958", size = 779564, upload-time = "2025-08-11T05:55:33.656Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/e8/62733eed9b49e4a37de924b24024223d4741de38355028a25a5a873783c3/slab-1.8.2-py3-none-any.whl", hash = "sha256:2ac0a1fcb4ddfaceadaa57606a7ef3ab934ad0b9b833ba53217c275571cb27c3", size = 766602, upload-time = "2025-08-11T05:55:32.281Z" },
+]
+
+[[package]]
+name = "sounddevice"
+version = "0.5.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ec/db/0c890e2d9aab9ba284021efc02e1d3aebfecab1b611762d7434602209bcf/sounddevice-0.5.6.tar.gz", hash = "sha256:8ec9fbfde2e32f020b167e348f3ab3bac6625a5f15af524d790108ac7147a410", size = 1120094, upload-time = "2026-08-17T07:55:05.048Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/1f/62eef605172bddc1017508469a12f75bc7c4194ece35c734f822795f53b1/sounddevice-0.5.6-py3-none-any.whl", hash = "sha256:de099612311ad81e55d31ccbd83f43ea6bf4d87b48f9b6ea55a1fbcde0eee4e0", size = 32793, upload-time = "2026-08-17T07:54:57.507Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/3e/cbc593c31a5f0d817b3fe97e64aa8461bd0f55cb07b67ce1b776296ae336/sounddevice-0.5.6-py3-none-win_amd64.whl", hash = "sha256:7f4162f514f007b0bf25a3ccfed3f1705bc2ec311888a90232729eec4f57a4f4", size = 1009630, upload-time = "2026-08-17T07:55:02.088Z" },
 ]
 
 [[package]]

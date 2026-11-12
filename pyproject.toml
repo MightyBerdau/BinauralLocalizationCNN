@@ -31,6 +31,11 @@ analysis = [
     "seaborn==0.12.2",
     "scikit-learn==1.0.2",
 ]
+# Used only by `blcnn example` (renders example stimuli with the KEMAR HRTFs bundled in slab).
+# pip: pip install ".[examples]"   uv: uv sync --extra examples
+examples = [
+    "slab==1.8.2",
+]
 
 [build-system]
 # setuptools 68.0 is the last release supporting Python 3.7.

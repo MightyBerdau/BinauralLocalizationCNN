@@ -1,8 +1,6 @@
-# BinauralLocalizationCNN — local (CPU) version
+# BinauralLocalizationCNN — local inference
 
 Deep neural networks that localize sound sources in 3D from binaural (two-ear) audio.
-
-## Purpose
 
 This repository is a fork of [afrancl/BinauralLocalizationCNN](https://github.com/afrancl/BinauralLocalizationCNN),
 the code accompanying
@@ -11,95 +9,109 @@ the code accompanying
 > adapted to real-world environments. *Nature Human Behaviour* **6**, 111–133 (2022).
 > https://doi.org/10.1038/s41562-021-01244-z
 
-The original code was written to run on a GPU computing cluster (SLURM jobs inside a Singularity container
-with TensorFlow 1.13). **This fork aims to make the pretrained networks run on an ordinary Windows PC without
-a GPU and without an HPC environment.** It has only been tested for **testing/prediction**, not for training.
+The original code was written for the authors' GPU cluster (SLURM jobs in a Singularity container) and
+expects input already converted to TFRecords. **This fork adds `blcnn`, a package that runs the pretrained
+networks on an ordinary PC without a GPU: a folder of binaural `.wav` files in, a CSV of predicted source
+locations out.** It covers prediction only, not training. The original code is kept, runnable, in
+[legacy/](legacy/) (see [Legacy workflow](#legacy-workflow-tfrecords)).
 
-> **Work in progress:** a new inference package (`python -m blcnn predict AUDIO_DIR`) that takes binaural
-> `.wav` files directly is being built in `src/blcnn/`; the original code now lives in `legacy/`. See
-> [ROADMAP.md](ROADMAP.md) for the plan, status and open questions. This README still describes the legacy
-> workflow and will be rewritten.
+Plan, status and open questions: [ROADMAP.md](ROADMAP.md).
 
 ## Table of contents
 
-- [Purpose](#purpose)
+- [Quick start](#quick-start)
 - [Requirements](#requirements)
 - [Installation](#installation)
-  - [1. Install Python 3.7 (64-bit)](#1-install-python-37-64-bit)
-  - [2. Create the virtual environment](#2-create-the-virtual-environment)
-  - [3. Download the network weights](#3-download-the-network-weights)
-- [Input data](#input-data)
-  - [Record format](#record-format)
-  - [Preparing your own audio](#preparing-your-own-audio)
-  - [Where to get data](#where-to-get-data)
 - [Usage](#usage)
-  - [Configure and run](#configure-and-run)
-  - [Output files](#output-files)
-  - [Converting the output to a direction](#converting-the-output-to-a-direction)
-  - [Caveats](#caveats)
+  - [Predicting locations: `blcnn predict`](#predicting-locations-blcnn-predict)
+  - [Input requirements](#input-requirements)
+  - [Output](#output)
+  - [How the predictions are computed](#how-the-predictions-are-computed)
+  - [Example stimuli: `blcnn example`](#example-stimuli-blcnn-example)
+  - [Use from Python](#use-from-python)
+- [Tests](#tests)
 - [Repository structure](#repository-structure)
-- [Changes compared to the original repository](#changes-compared-to-the-original-repository)
-- [Running on a cluster (original setup)](#running-on-a-cluster-original-setup)
+- [Legacy workflow (TFRecords)](#legacy-workflow-tfrecords)
 - [Resources](#resources)
 - [Citation](#citation)
 
+## Quick start
+
+After [installation](#installation) (with the `examples` extra) and downloading the weights:
+
+```sh
+.venv/Scripts/python.exe -m blcnn example example_stimuli
+.venv/Scripts/python.exe -m blcnn predict example_stimuli -o example_predictions.csv
+```
+
+The first command writes nine binaural noise stimuli at known locations; the file names give the true
+location (`az150_el00.wav` = azimuth 150°, elevation 0°). The second predicts their locations with all ten
+networks (about 2 minutes on CPU) and writes them to `example_predictions.csv`. All nine should match.
+
 ## Requirements
 
-- Windows with **Git Bash** (the commands below use POSIX shell syntax)
 - **Python 3.7, 64-bit** — TensorFlow 1.x does not support newer Python versions
 - No GPU needed
 - Disk space for the weights: 0.65 GB (net1) up to ~20 GB (all ten networks)
+- Tested on Windows 11 with Git Bash (the commands below use POSIX shell syntax). The lock file also
+  covers Linux x86_64, but Linux and the `--device gpu` option are untested so far.
 
 ## Installation
 
 ### 1. Install Python 3.7 (64-bit)
+
+On Windows:
 
 ```sh
 winget install --id Python.Python.3.7 --scope user --architecture x64
 ```
 
 Alternatively, use the installer `python-3.7.9-amd64.exe` from python.org.
-
 Check: `py -0p` should list `-V:3.7  ...\Python37\python.exe` (not `3.7-32`).
 
 ### 2. Create the virtual environment
 
-[pyproject.toml](pyproject.toml) declares the required Python version (3.7) and the direct dependencies:
+[pyproject.toml](pyproject.toml) declares the required Python version and the direct dependencies:
 TensorFlow 1.15.5 (CPU) and compatible versions of numpy, scipy, protobuf, etc. Don't upgrade these
-packages; newer versions break TensorFlow 1.15. The optional `analysis` extra (pandas, seaborn,
-scikit-learn) is only needed for the scripts in [analysis_and_plotting/](legacy/analysis_and_plotting/).
+packages; newer versions break TensorFlow 1.15. Two optional extras:
 
-From the repository root, in Git Bash, either with [uv](https://docs.astral.sh/uv/) (recommended):
+| extra | packages | needed for |
+|---|---|---|
+| `examples` | [slab](https://pypi.org/project/slab/) (bundles the MIT KEMAR HRTFs) | `blcnn example`. On Linux, slab also needs the PortAudio library (e.g. `apt install libportaudio2`) |
+| `analysis` | pandas, seaborn, scikit-learn | the scripts in [legacy/analysis_and_plotting/](legacy/analysis_and_plotting/) |
+
+From the repository root, either with [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```sh
-uv sync --extra analysis --python "$(py -3.7 -c 'import sys; print(sys.executable)')"
+uv sync --extra examples --extra analysis --python "$(py -3.7 -c 'import sys; print(sys.executable)')"
 ```
 
-This creates `.venv` and installs exactly the versions recorded in [uv.lock](uv.lock), which uv
-generates from pyproject.toml (don't edit it by hand). Note: `uv sync` without `--extra analysis`
-removes the analysis packages again.
+This creates `.venv`, installs exactly the versions recorded in [uv.lock](uv.lock) (generated by uv from
+pyproject.toml; don't edit it by hand) and installs `blcnn` in editable mode. A later `uv sync` without
+an `--extra` removes that extra's packages again.
 
 Or with pip:
 
 ```sh
 py -3.7 -m venv .venv
 .venv/Scripts/python.exe -m pip install --upgrade "pip<24.1"
-.venv/Scripts/python.exe -m pip install --default-timeout=300 ".[analysis]"
+.venv/Scripts/python.exe -m pip install --default-timeout=300 -e ".[examples,analysis]"
 ```
 
-This installs only the dependencies (the repository itself is not a package). pip ignores
-[uv.lock](uv.lock), so packages that are not pinned in pyproject.toml may resolve to different versions.
-For the exact locked versions without uv, install from a requirements file exported by someone with uv
-(`uv export --all-extras --format requirements-txt > requirements.txt`) using `pip install -r requirements.txt`.
+pip ignores [uv.lock](uv.lock), so packages that are not pinned in pyproject.toml may resolve to different
+versions. For the exact locked versions without uv, install from a requirements file exported by someone
+with uv (`uv export --all-extras --format requirements-txt > requirements.txt`).
 
 Verify the installation:
 
 ```sh
-.venv/Scripts/python.exe -c "import tensorflow as tf, tensorflow.contrib.slim; print(tf.__version__)"
+.venv/Scripts/python.exe -m blcnn --version
 ```
 
-This should print `1.15.5`. TensorFlow also prints many deprecation warnings, and possibly a harmless
-`SyntaxError ... 'import`; both can be ignored.
+TensorFlow prints many deprecation warnings when the networks are loaded; they can be ignored.
+
+**Note:** call the CLI as `python -m blcnn ...`. The `blcnn` launcher that the installation creates does not
+start on Windows with Python 3.7.
 
 ### 3. Download the network weights
 
@@ -114,177 +126,243 @@ This should print `1.15.5`. TensorFlow also prints many deprecation warnings, an
    unzip -q "Binaural Localization Net Weights.zip" "net1/*" -d weights
    ```
 
-   Each folder must contain `config_array.npy` and `model.ckpt-100000.*`.
-   The networks are large (net1: 0.65 GB; net4, net5, net7 and net10: about 3.5 GB each; about 20 GB in
-   total), so only extract the ones you need.
-
-## Input data
-
-### Record format
-
-The model doesn't read `.wav` files directly. It reads **gzip-compressed TFRecords** in which each sound is
-already split into cochlear subbands. Each record contains:
-
-| key | content |
-|---|---|
-| `train/image` | float32 bytes, shape `[39, 48000, 2]`: 39 subbands (30 Hz–20 kHz, pycochleagram), 1 s at 48 kHz, left/right ear |
-| `train/azim`, `train/elev` | true direction in degrees (int64) |
-| `train/image_height`, `train/image_width` | int64 |
-
-You always also need a **set of background-noise TFRecords** in the same format: the code mixes background
-noise into every sound. Use SNR = 80 dB to make the noise negligible.
-
-### Preparing your own audio
-
-The model judges exactly **1 s** of audio and returns **one** location for it. Prepare each 1-s segment as
-follows. This follows the paper's test procedure (Methods section of the paper cited above) and the
-cochleagram settings in BinauralDataGen's `cochleagram_wrapper()`.
-
-1. **Binaural stereo audio at 48 kHz.** Channel 0 is the left ear, channel 1 the right. The audio must
-   contain head/ear cues: recorded with in-ear microphones, or rendered with HRIRs/BRIRs. Resample other
-   sample rates to 48 kHz.
-2. **Cut 2 s around your segment:** 0.5 s before and 0.5 s after the second you want. Pad with zeros if
-   needed.
-3. **Scale the 2-s stereo signal to an RMS of 0.1**, using one common factor for both ears so the level
-   difference between them is kept.
-4. **Compute subbands for each ear** with the [pycochleagram](legacy/pycochleagram/) included in this repo:
-   ```python
-   from pycochleagram import cochleagram as cgm
-   sub = cgm.human_cochleagram(ear, 48000, low_lim=30, hi_lim=20000, sample_factor=1,
-                               padding_size=10000, ret_mode='subband')  # 41 x 96000
-   sub = sub[1:-1]                    # drop low-/high-pass edge filters -> 39 bands
-   ```
-5. **Keep the middle 1 s** (`sub[:, 24000:72000]`) and stack both ears into a float32 array of shape
-   `[39, 48000, 2]`. Set all values with magnitude below `max(|x|)/1000` to 0 (−60 dB cutoff).
-6. **Write one TFRecord example per segment** (GZIP compression, file name `train*.tfrecords`, one folder
-   per stimulus set) with the keys from the table above. Labels are in degrees; use 0 if the direction is
-   unknown. Optionally add an int64 key such as `train/file_idx`. Every extra key is copied to the output,
-   so you can match predictions to files (the output order is shuffled).
-7. **Background set:** in a separate folder, with **at least as many records as stimuli**. The records need
-   `train/azim`/`train/elev` and a non-zero RMS. With SNR = 80 dB a near-silent signal is fine; see
-   [make_test_tfrecords.py](legacy/make_test_tfrecords.py) for an example of both record types.
-
-Make the number of stimuli a multiple of `BATCH_SIZE`, because an incomplete last batch is dropped.
-
-### Where to get data
-
-- **Precomputed training data** used for the original model:
-  [Google Drive](https://drive.google.com/drive/folders/1pUyMmkurxEWFeofbLKy5-QVWrcMbM8Wz?usp=sharing)
-- **Your own `.wav` files**, prepared as described above. The authors' wrapper
-  [BinauralDataGen](https://github.com/afrancl/BinauralDataGen) does a similar conversion, but it is set up
-  for their cluster, takes one *random* 1-s window from the first 2 s of each file, and won't run locally
-  without changes.
-- **A synthetic test set** for a quick check (no real HRTFs: left/right cues only, so front/back and
-  elevation are not meaningful):
-
-  ```sh
-  .venv/Scripts/python.exe legacy/make_test_tfrecords.py test_data
-  ```
-
-  This writes `test_data/lateral_noise/` (32 noise bursts at 8 left/right angles) and `test_data/bkgd/`,
-  about 450 MB in total.
+   Each folder must contain `config_array.npy` and `model.ckpt-100000.*`. The original folder names
+   `arch_number_<N>_init_0` also work. The networks are large (net1: 0.65 GB; net4, net5, net7 and net10:
+   about 3.5 GB each; about 20 GB in total). The paper reports results averaged across all ten networks
+   (see [How the predictions are computed](#how-the-predictions-are-computed)).
 
 ## Usage
 
-### Configure and run
-
-Edit the variables at the top of [run_test_local.sh](legacy/run_test_local.sh):
-
-| variable | meaning |
-|---|---|
-| `model_path` | folder containing the `net<N>` folders (default `weights`; the original `arch_number_<N>_init_0` names also work) |
-| `arch_ID` | which network to use (`1` = net1) |
-| `model_version` | checkpoint number (`100000`) |
-| `train_path_pattern` | the sounds to localize |
-| `bkgd_train_path_pattern` | the background-noise records |
-| `SNR_min`, `SNR_max` | leave both at `80`. In test mode the code replaces values up to 30 (min) and 40 (max) with 30–35 dB |
-| `BATCH_SIZE` | keep it small (2) on a normal PC; must be at least 2 |
-
-Use forward slashes in all paths. Then run, from the repo root:
+### Predicting locations: `blcnn predict`
 
 ```sh
-sh legacy/run_test_local.sh
+.venv/Scripts/python.exe -m blcnn predict AUDIO_DIR -o predictions.csv
 ```
 
-The defaults run net1 on the synthetic test set, which takes about 30 s on CPU.
-
-### Output files
-
-The results are written **into the network's folder**, e.g. `weights/net1/`
-(`<stim>` is the name of the folder containing the input TFRecords):
-
-| file | content |
+| option | meaning |
 |---|---|
-| `batch_conditional_<stim>_iter100000.npy` | one entry per sound: `(probabilities[504], labels)` |
-| `keys_test_<stim>_iter100000.json` | names of the labels, in order (azimuth and elevation in 5° units, i.e. degrees / 5) |
-| `accuracies_test_<stim>_iter100000.json` | fraction of exact azimuth+elevation matches |
+| `AUDIO_DIR` | folder with binaural `.wav` files, searched recursively |
+| `-o`, `--output` | output CSV (default `predictions.csv`) |
+| `--weights-dir` | folder containing `net1` … `net10` (default `weights`) |
+| `--nets` | networks to use, e.g. `1,3,8` or `all` (default `all`); with several networks their output probabilities are averaged, see [How the predictions are computed](#how-the-predictions-are-computed) |
+| `--device` | `cpu` (default) or `gpu` (untested) |
+| `--batch-size` | files per forward pass (default 1 on CPU, 16 on GPU) |
+| `-q`, `--quiet` | only print warnings and errors |
 
-### Converting the output to a direction
+The networks are loaded one after another, so memory use is set by the largest network, not their number.
+Runtime on a 16 GB Windows PC (CPU): about 1.5–2 minutes for ten files with all ten networks.
+Preprocessed inputs (about 15 MB per file) are cached temporarily next to the output file.
+
+### Input requirements
+
+The pipeline follows the paper's test procedure (Methods):
+
+- **Binaural stereo audio**: channel 0 = left ear, channel 1 = right ear. The audio must contain
+  head/ear cues: recorded with in-ear microphones or a dummy head, or rendered with HRIRs/BRIRs. Ordinary
+  stereo recordings or plain mono sounds are not meaningful input.
+- **2 s at 48 kHz per file.** The 2-s signal is scaled to an RMS of 0.1 (one factor for both ears),
+  converted into 39 cochlear subbands (30 Hz–20 kHz), and the network judges the **middle 1 s**. Each
+  file gets **one** predicted location.
+- Deviations are handled with a warning in the output: other sample rates are resampled to 48 kHz;
+  longer files are cropped to their first 2 s; shorter files are zero-padded symmetrically to 2 s.
+- Files that cannot be used (unreadable, not stereo, silent) are skipped and listed in
+  `<output>_errors.csv`; the run continues.
+
+### Output
+
+One row per file:
+
+| column | content |
+|---|---|
+| `file` | path relative to `AUDIO_DIR` |
+| `azimuth_deg` | predicted azimuth, 0–355° in 5° steps |
+| `elevation_deg` | predicted elevation, 0–60° in 10° steps |
+| `probability` | output probability of the predicted location (averaged over the networks) |
+| `networks` | networks used |
+| `warnings` | preprocessing warnings (resampled, cropped, padded) |
+
+**Direction convention:** azimuth 0° = straight ahead, increasing **counterclockwise** seen from above:
+90° = left, 180° = behind, 270° = right. Elevation 0° = ear level, positive = up. The networks have
+504 output classes (72 azimuths × 7 elevations). The authors do not document the convention; it was
+derived from the original label code and confirmed with the KEMAR example stimuli (left/right,
+front/back and elevation; see [ROADMAP.md](ROADMAP.md)).
+
+Locations in the median plane (straight ahead or behind) have no interaural differences and are harder.
+On the example stimuli, net1 alone mislocalizes all three median-plane sources, while the ten-network
+average gets them right.
+
+### How the predictions are computed
+
+Each network ends in a softmax layer with 504 units, one per location bin, and outputs a probability for
+every bin. For each file, blcnn:
+
+1. runs every selected network (`--nets`; default: all ten) on the same input;
+2. **averages the 504 probabilities across the selected networks**, with equal weight;
+3. reports the bin with the **highest averaged probability** as `azimuth_deg`/`elevation_deg`, and that
+   averaged probability as `probability`.
+
+The rule is the same for every selection: with `--nets 1` the result is net1's own most probable bin;
+with `--nets 1,3,8` it is the average over these three networks only; with `all` the average over all ten.
+Different selections can therefore give different predictions for the same file.
+
+**This is not the procedure of the paper.** The paper treats the ten networks like participants in an
+experiment: each network makes its own judgement for each stimulus (the bin with the maximum softmax
+output), results such as localization errors or mean judged positions are computed **per network**, and
+the reported value is the mean across networks, with error bars bootstrapped across networks (Methods,
+"Psychophysical evaluation of model"). The paper never combines the networks into a single prediction per
+stimulus. blcnn's averaging of probabilities (a "soft-voting" ensemble) is a design choice of this fork to
+give one prediction per file; it can differ from what most individual networks judge.
+
+To analyse your data the way the paper did, run each network separately (`--nets 1`, `--nets 2`, …, one
+output file each), compute your measure per network, then average across networks.
+
+### Example stimuli: `blcnn example`
+
+```sh
+.venv/Scripts/python.exe -m blcnn example [OUTPUT_DIR]   # default: example_stimuli
+```
+
+Writes nine 2-s, 48-kHz stimuli: one pink-noise token rendered with the MIT KEMAR head-related impulse
+responses (Gardner & Martin, 1995) bundled in slab — the HRIR set the networks were trained with — at
+azimuth 0, 30, 90, 150, 180, 270, 330° (elevation 0°), azimuth 30° / elevation 20° and azimuth 0° /
+elevation 60°. 30° and 150° (and 330° and 210°) are front/back mirror images with nearly identical
+interaural cues, so they test whether the networks use spectral (pinna) cues. The stimuli are anechoic,
+unlike the training data, which also simulated a room. They are generated, not shipped, and are identical
+on every run. Needs the `examples` extra.
+
+### Use from Python
+
+`blcnn` is an ordinary package; the CLI is a thin wrapper around
 
 ```python
-import numpy as np
-data = np.load("weights/net1/batch_conditional_lateral_noise_iter100000.npy",
-               allow_pickle=True)
-for probs, labels in data:
-    c = int(np.argmax(probs))
-    azimuth, elevation = (c % 72) * 5, (c // 72) * 10   # degrees
+from blcnn.predict import predict_folder
+
+rows = predict_folder("my_wavs", "predictions.csv", weights_dir="weights", nets="all")
+# rows: list of dicts with the CSV columns above (one per usable file)
 ```
 
-Azimuth increases **counterclockwise**: 90° is left and 270° is right. This was worked out from the code
-and a synthetic left/right test, not from the authors' documentation.
+The building blocks can also be used directly: `blcnn.audio.prepare_signal` (load, resample, crop/pad,
+normalize), `blcnn.cochleagram.model_input` (subbands, middle 1 s), `blcnn.weights.select_networks`,
+`blcnn.model.LocalizationNetwork` (one network; `predict(batch)` returns the 504 class probabilities) and
+`blcnn.predict.decode_class` (class → azimuth, elevation). There is no stable public API yet: these
+functions may change, and in-memory audio or the full probability distribution are not yet supported by
+`predict_folder`.
 
-### Caveats
+## Tests
 
-- The order of the sounds in the output is **shuffled**. Use the stored labels to match predictions to
-  sounds.
-- Sounds left over after the last full batch are dropped (e.g. with `BATCH_SIZE=2`, an odd last one).
-- Leave the special stimulus flags in the script (`sam_tones`, `precedence_effect`, …) set to `False` for
-  ordinary sounds. They switch the code to the authors' psychoacoustic experiments.
-- Training has not been tested locally and is unlikely to be practical on a CPU.
+```sh
+.venv/Scripts/python.exe -m pytest
+```
+
+Unit tests need no weights. Tests marked `weights` run only if `weights/` contains the networks
+(`BLCNN_WEIGHTS_DIR`, `BLCNN_TEST_NETS` — default `1` — select folder and networks):
+
+- [tests/test_equivalence.py](tests/test_equivalence.py) compares blcnn with the original testing code on
+  the same input (same predicted class; probabilities differ by at most ~3e-6).
+- [tests/test_examples.py](tests/test_examples.py) checks that the networks localize the example stimuli
+  correctly (needs the `examples` extra).
 
 ## Repository structure
 
 | path | description |
 |---|---|
-| [call_model_training_valid_pad_francl.py](legacy/call_model_training_valid_pad_francl.py) | main entry point: parses the experiment parameters, validates the model folder and starts training/testing |
-| [tf_record_CNN_spherical_gradcheckpoint_valid_pad.py](legacy/tf_record_CNN_spherical_gradcheckpoint_valid_pad.py) | data pipeline, network construction and train/test loop |
-| [NetBuilder_valid_pad.py](legacy/NetBuilder_valid_pad.py) | builds the network from `config_array.npy` |
-| [run_test_local.sh](legacy/run_test_local.sh) | **local** test/prediction script (this fork) |
-| [make_test_tfrecords.py](legacy/make_test_tfrecords.py) | generates a synthetic test set (this fork) |
-| [pyproject.toml](pyproject.toml), [uv.lock](uv.lock) | Python version and dependencies; exact pinned versions in the lock file (this fork) |
-| [pycochleagram/](legacy/pycochleagram/) | cochlear filterbank used to create the model input |
-| [multi_source_training/](legacy/multi_source_training/) | code for the multi-source models (see its README.txt) |
-| [analysis_and_plotting/](legacy/analysis_and_plotting/) | analysis and plotting scripts from the original authors |
-| `legacy/slurm_*.sh`, `legacy/interactive_*.sh` | original cluster scripts (SLURM / Singularity) |
+| [src/blcnn/](src/blcnn/) | the inference package: `cli.py` (command line), `predict.py` (pipeline, CSV output), `audio.py` (loading, resampling, normalization), `cochleagram.py` (subbands), `model.py` (TensorFlow graph), `weights.py` (finding networks), `examples.py` (example stimuli) |
+| [src/blcnn/_vendor/](src/blcnn/_vendor/) | copies of pycochleagram and NetBuilder from the original code (changes listed in its README) |
+| [tests/](tests/) | pytest tests |
+| [legacy/](legacy/) | the original code with the CPU fixes listed below |
+| [pyproject.toml](pyproject.toml), [uv.lock](uv.lock) | Python version and dependencies; exact pinned versions in the lock file |
+| [ROADMAP.md](ROADMAP.md) | plan, status, open questions |
 
-## Changes compared to the original repository
+## Legacy workflow (TFRecords)
 
-- [layer_generator.py](legacy/layer_generator.py): a placeholder. The module is imported but missing from the
-  original repo, and it is never used.
+The original testing code still runs locally on CPU. It is only needed to reproduce the original pipeline
+exactly or for training (untested locally, and unlikely to be practical on a CPU); for prediction, use
+`blcnn predict`, which gives the same results (see [Tests](#tests)) from `.wav` files directly.
+
+### Input format
+
+The original code reads **gzip-compressed TFRecords** in which each 1-s segment is already converted to
+cochlear subbands:
+
+| key | content |
+|---|---|
+| `train/image` | float32 bytes, shape `[39, 48000, 2]`: 39 subbands, 1 s at 48 kHz, left/right ear |
+| `train/azim`, `train/elev` | true direction in degrees (int64) |
+| `train/image_height`, `train/image_width` | int64 |
+
+The subbands are computed as in `blcnn.cochleagram.model_input` (2 s at RMS 0.1 → pycochleagram with
+`low_lim=30, hi_lim=20000, sample_factor=1, padding_size=10000`, edge filters dropped → middle 1 s →
+values below `max(|x|)/1000` set to 0). Write one example per segment (GZIP, file name `train*.tfrecords`,
+one folder per stimulus set). Every extra int64 key (e.g. `train/file_idx`) is copied to the output.
+
+You also need a **folder of background-noise records** in the same format, with at least as many records as
+stimuli and a non-zero RMS: the code mixes background noise into every stimulus. At SNR = 80 dB it is
+nearly negligible. [legacy/make_test_tfrecords.py](legacy/make_test_tfrecords.py) writes an example of both
+(32 noise bursts at 8 left/right angles, no HRTFs, about 450 MB):
+
+```sh
+.venv/Scripts/python.exe legacy/make_test_tfrecords.py test_data
+```
+
+Precomputed training data of the original model:
+[Google Drive](https://drive.google.com/drive/folders/1pUyMmkurxEWFeofbLKy5-QVWrcMbM8Wz?usp=sharing).
+The authors' input generator [BinauralDataGen](https://github.com/afrancl/BinauralDataGen) is set up for
+their cluster and takes one *random* 1-s window from the first 2 s of each file.
+
+### Running
+
+Edit the variables at the top of [legacy/run_test_local.sh](legacy/run_test_local.sh):
+
+| variable | meaning |
+|---|---|
+| `model_path` | folder containing the `net<N>` folders (default `weights`) |
+| `arch_ID` | which network to use (`1` = net1) |
+| `model_version` | checkpoint number (`100000`) |
+| `train_path_pattern` | the stimulus records |
+| `bkgd_train_path_pattern` | the background records |
+| `SNR_min`, `SNR_max` | leave both at `80`. In test mode the code replaces values up to 30 (min) and 40 (max) with 30–35 dB |
+| `BATCH_SIZE` | keep it small (2) on a normal PC; must be at least 2 |
+
+Use forward slashes in all paths, then run `sh legacy/run_test_local.sh` from the repository root. The
+defaults run net1 on the test set above (about 30 s on CPU).
+
+The results are written **into the network's folder**, e.g. `weights/net1/` (`<stim>` = name of the
+stimulus folder):
+
+| file | content |
+|---|---|
+| `batch_conditional_<stim>_iter100000.npy` | one entry per stimulus: `(probabilities[504], labels)`; class → direction as in `blcnn.predict.decode_class` |
+| `keys_test_<stim>_iter100000.json` | names of the labels, in order (azimuth and elevation in 5° units) |
+| `accuracies_test_<stim>_iter100000.json` | fraction of exact azimuth+elevation matches |
+
+Caveats: the output order is **shuffled** (match via the stored labels); stimuli left over after the last
+full batch are dropped; leave the special stimulus flags in the script (`sam_tones`,
+`precedence_effect`, …) at `False` for ordinary sounds.
+
+### Changes to the original code
+
+- [layer_generator.py](legacy/layer_generator.py): a placeholder. The module is imported but missing from
+  the original repository, and it is never used.
 - [call_model_training_valid_pad_francl.py](legacy/call_model_training_valid_pad_francl.py):
-  `np.load(..., allow_pickle=True)` for `config_array.npy` (needed by the installed numpy version).
+  `np.load(..., allow_pickle=True)` for `config_array.npy`; also accepts the weights' download folder names
+  (`net<N>`) in addition to `arch_number_<N>_init_0`.
 - [tf_record_CNN_spherical_gradcheckpoint_valid_pad.py](legacy/tf_record_CNN_spherical_gradcheckpoint_valid_pad.py):
-  - the first downsampling convolution now processes one example at a time. On CPU, the full-batch version
+  - the first downsampling convolution processes one example at a time. On CPU, the full-batch version
     exhausts memory and aborts. The results are identical.
   - the unused `tf.add_check_numerics_ops()` is disabled, because it doesn't work with the change above.
   - the batch size can be set with the `BATCH_SIZE` environment variable (default 16, as in the original).
-- The original code moved to [legacy/](legacy/); the entry script also accepts the weights' download
-  folder names (`net<N>`) in addition to `arch_number_<N>_init_0`.
-- New files: [run_test_local.sh](legacy/run_test_local.sh), [make_test_tfrecords.py](legacy/make_test_tfrecords.py),
-  [pyproject.toml](pyproject.toml), [uv.lock](uv.lock), `.gitignore`.
+- New: [run_test_local.sh](legacy/run_test_local.sh), [make_test_tfrecords.py](legacy/make_test_tfrecords.py).
 
-## Running on a cluster (original setup)
+### Original cluster setup
 
-The original workflow is still included in [legacy/](legacy/):
-
-- Example parameters for testing and training are in
+- Example parameters for testing and training:
   [slurm_CNN_spherical_testing_francl.sh](legacy/slurm_CNN_spherical_testing_francl.sh) and
-  [slurm_CNN_spherical_training_francl.sh](legacy/slurm_CNN_spherical_training_francl.sh). Before running, change
-  the model save folder to point to your directory with the model architecture config file, and the data
-  folder to point to your data. The Python code itself contains no absolute paths.
-- The authors provide a [Singularity image](https://sylabs.io/singularity/) with all required packages
-  (TensorFlow 1.13):
+  [slurm_CNN_spherical_training_francl.sh](legacy/slurm_CNN_spherical_training_francl.sh). Point the model
+  folder and the data folder to your directories; the Python code contains no absolute paths.
+- The authors provide a [Singularity image](https://sylabs.io/singularity/) with TensorFlow 1.13:
   https://www.dropbox.com/s/ey74fiw4uquww0n/tfv1.13_tcmalloc.simg?dl=0
+- [multi_source_training/](legacy/multi_source_training/): code for the multi-source models (see its
+  README.txt); [analysis_and_plotting/](legacy/analysis_and_plotting/): the authors' analysis scripts.
 
 ## Resources
 
@@ -293,6 +371,7 @@ The original workflow is still included in [legacy/](legacy/):
 - Precomputed training data: https://drive.google.com/drive/folders/1pUyMmkurxEWFeofbLKy5-QVWrcMbM8Wz?usp=sharing
 - Input generation (BinauralDataGen): https://github.com/afrancl/BinauralDataGen
 - Cochlear model (pycochleagram): https://github.com/mcdermottLab/pycochleagram
+- Example-stimulus HRTFs (slab): https://pypi.org/project/slab/
 
 ## Citation
 
@@ -301,3 +380,6 @@ If you use the models, please cite the original paper:
 > Francl, A. & McDermott, J. H. Deep neural network models of sound localization reveal how perception is
 > adapted to real-world environments. *Nature Human Behaviour* **6**, 111–133 (2022).
 > https://doi.org/10.1038/s41562-021-01244-z
+
+The example stimuli use the KEMAR HRTF measurements of Gardner, W. G. & Martin, K. D. HRTF measurements of a
+KEMAR. *J. Acoust. Soc. Am.* **97**, 3907–3908 (1995).

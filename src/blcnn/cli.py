@@ -39,7 +39,32 @@ def build_parser():
                          help="files per forward pass (default: 1 on CPU, 16 on GPU)")
     predict.add_argument("-q", "--quiet", action="store_true",
                          help="only print warnings and errors")
+
+    example = sub.add_parser(
+        "example",
+        help="write example stimuli (noise at known locations) to try 'predict' on",
+        description="Write binaural example stimuli to OUTPUT_DIR: 2-s pink noise rendered "
+                    "with the KEMAR HRTFs at known locations, named azAAA_elEE.wav "
+                    "(azimuth counterclockwise, 90 = left). Requires the optional "
+                    "dependency slab: pip install \".[examples]\".")
+    example.add_argument("output_dir", nargs="?", default="example_stimuli",
+                         help="folder for the .wav files (default: %(default)s)")
+    example.add_argument("-q", "--quiet", action="store_true",
+                         help="only print warnings and errors")
     return parser
+
+
+def _example(args):
+    from .examples import ExamplesError, make_examples
+
+    try:
+        paths = make_examples(args.output_dir)
+    except ExamplesError as err:
+        logging.error("%s", err)
+        return 1
+    logging.info("%d example stimuli written; try: blcnn predict %s -o example_predictions.csv",
+                 len(paths), args.output_dir)
+    return 0
 
 
 def _predict(args):
@@ -75,6 +100,8 @@ def main(argv=None):
                         format="%(levelname)s: %(message)s")
     if args.command == "predict":
         return _predict(args)
+    if args.command == "example":
+        return _example(args)
     return 0
 
 

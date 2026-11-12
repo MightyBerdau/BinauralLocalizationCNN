@@ -1,7 +1,7 @@
 # Roadmap
 
 Plan for turning this fork into a usable, reproducible inference pipeline for the pretrained networks of
-Francl & McDermott (2022). Status as of 2026-11-11.
+Francl & McDermott (2022). Status as of 2026-11-12.
 
 ## Goal
 
@@ -21,7 +21,7 @@ TFRecords themselves and was built for the authors' SLURM cluster, which makes i
 | files shorter than 2 s | zero-padded symmetrically to 2 s, with a warning |
 | files longer than 2 s | first 2 s used, with a warning |
 | mono / unreadable / silent files | skipped and listed in `<output>_errors.csv`; the run continues |
-| networks | user's choice, **default: all ten**, probabilities averaged ("the model" in the paper) |
+| networks | user's choice, **default: all ten**; softmax probabilities averaged across the selected networks, then argmax (soft-voting ensemble). Deviates from the paper, which judges per network and averages *results* across networks (README, "How the predictions are computed") |
 | output | CSV with the top prediction per file |
 | weights | users unzip the authors' download into `weights/` and keep the folder names `net1` … `net10` |
 | interface | installable package `blcnn` with CLI (`python -m blcnn predict …`) and Python API |
@@ -50,6 +50,13 @@ Same predicted class for all stimuli; max. probability difference 5e-7 … 3e-6 
 (it always allocates Adam optimizer slots, ~3× the checkpoint size). Run on a larger machine:
 `BLCNN_TEST_NETS=4,5,7,10 python -m pytest tests/test_equivalence.py -rs`.
 
+### 3b. Example stimuli — done
+`python -m blcnn example [DIR]` writes nine 2-s pink-noise stimuli rendered with the MIT KEMAR HRIRs
+bundled in [slab](https://pypi.org/project/slab/) (optional extra `examples`) — the HRIR set the networks
+were trained with (paper, Methods, ref. 53). Locations cover left/right, front/back mirror pairs and
+elevations 0/20/60. The ten-network ensemble localizes all nine exactly; single networks (net1) miss the
+median-plane ones (azimuth 0/180). `tests/test_examples.py`.
+
 ### 4. GPU on a Linux server — not started
 Blocked: no server chosen yet. To do once one is available:
 
@@ -67,18 +74,14 @@ Blocked: no server chosen yet. To do once one is available:
 - Run the equivalence test for all networks there (closes milestone 3).
 - Document the exact `docker run` / `apptainer exec` commands in the README.
 
-### 5. Documentation — not started
-Rewrite `README.md` around `blcnn predict`: installation (Windows and Linux), input requirements (2-s
-binaural files at 48 kHz), output format, azimuth/elevation convention, GPU usage, the legacy workflow as a
-separate section, and the planned extensions below.
-
 ## Planned extensions (not scheduled)
 
 - **Segment selection:** a CSV listing file + start time per 1-s segment, instead of the middle second.
 - **Sliding windows:** a time course of predictions over longer recordings.
 - **True labels:** optional CSV with true azimuth/elevation → error columns in the output.
 - **Full output distribution:** save the 504-way probabilities (e.g. `.npz`) for later analysis.
-- **Per-network results** in addition to the ensemble average.
+- **Per-network results** in addition to the ensemble average (one run, all networks), so the paper's
+  per-network analysis doesn't need one `--nets N` run per network.
 - **Front–back folding** of azimuths, as used in the paper for frontal-only experiments.
 - **Plots** (e.g. predicted vs. true azimuth).
 - **Weights download/import command** with checksums.
@@ -87,9 +90,11 @@ separate section, and the planned extensions below.
 ## Open questions and known issues
 
 - **Azimuth convention:** class → direction mapping is derived from the original label construction
-  (`class = 36 * elev/5 + azim/5`, i.e. 72 azimuths × 7 elevations); "90° = left" (counterclockwise) was
-  observed on synthetic left/right stimuli only. The authors never answered the corresponding issue
-  (afrancl/BinauralLocalizationCNN#4). A check with real binaural recordings of known direction would settle it.
+  (`class = 36 * elev/5 + azim/5`, i.e. 72 azimuths × 7 elevations). "0° = front, 90° = left"
+  (counterclockwise) is confirmed with the KEMAR example stimuli, including front/back and elevation
+  (milestone 3b; slab's KEMAR data use the same convention, checked by ILD/ITD at ±90°). The authors never
+  answered the corresponding issue (afrancl/BinauralLocalizationCNN#4). Still unchecked: real recordings
+  (with a room) of known direction.
 - **License:** the original repository has no license. Forking on GitHub is covered by GitHub's terms, but
   reuse beyond that is not clearly permitted.
 - **Background noise in the original pipeline:** because of the model's `x ** 0.3` compression, the
