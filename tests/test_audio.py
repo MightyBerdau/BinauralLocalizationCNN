@@ -24,8 +24,16 @@ def test_load_audio_stereo_24bit(tmp_path):
 
 def test_load_audio_rejects_mono(tmp_path):
     path = _write(tmp_path / "mono.wav", _noise(1000, channels=1)[:, 0])
-    with pytest.raises(AudioError, match="expected 2 channels"):
+    with pytest.raises(AudioError, match="expected at least 2 channels"):
         load_audio(path)
+
+
+def test_prepare_signal_uses_first_two_of_many_channels(tmp_path):
+    multi = _noise(SIGNAL_SAMPLES, channels=4)
+    signal, warnings = prepare_signal(_write(tmp_path / "multi.wav", multi))
+    assert signal.shape == (SIGNAL_SAMPLES, 2)
+    assert len(warnings) == 1 and "4 channels" in warnings[0]
+    np.testing.assert_allclose(signal, normalize_rms(multi[:, :2]), atol=1e-4)
 
 
 def test_load_audio_rejects_unreadable(tmp_path):

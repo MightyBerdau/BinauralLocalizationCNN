@@ -165,9 +165,10 @@ The pipeline follows the paper's test procedure (Methods):
 - **2 s at 48 kHz per file.** The 2-s signal is scaled to an RMS of 0.1 (one factor for both ears),
   converted into 39 cochlear subbands (30 Hz–20 kHz), and each network judges the **middle 1 s**. Each
   network gives **one** predicted location per file.
-- Deviations are handled with a warning in the output: other sample rates are resampled to 48 kHz;
+- Deviations are handled with a warning in the output: files with more than 2 channels are reduced to
+  their first 2 channels (0 = left, 1 = right); other sample rates are resampled to 48 kHz;
   longer files are cropped to their first 2 s; shorter files are zero-padded symmetrically to 2 s.
-- Files that cannot be used (unreadable, not stereo, silent) are skipped and listed in
+- Files that cannot be used (unreadable, fewer than 2 channels, silent) are skipped and listed in
   `<output>_errors.csv`; the run continues.
 
 ### Output
@@ -181,7 +182,7 @@ One row per file and network ("long" format), sorted by file, then network:
 | `azimuth_deg` | azimuth predicted by this network, 0–355° in 5° steps |
 | `elevation_deg` | elevation predicted by this network, 0–60° in 10° steps |
 | `probability` | this network's output probability for the predicted location |
-| `warnings` | preprocessing warnings (resampled, cropped, padded); the same for all rows of a file |
+| `warnings` | preprocessing warnings (extra channels dropped, resampled, cropped, padded); the same for all rows of a file |
 
 With `--nets all` and 20 files, the CSV has 200 rows. For example (excerpt from the example stimuli):
 

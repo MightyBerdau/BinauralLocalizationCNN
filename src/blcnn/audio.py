@@ -21,10 +21,11 @@ class AudioError(ValueError):
 
 
 def load_audio(path):
-    """Read a stereo audio file.
+    """Read an audio file with at least 2 channels.
 
     Returns ``(signal, sample_rate)`` with ``signal`` as float64 array of shape
-    ``(n_samples, 2)`` (column 0 = left ear, column 1 = right ear).
+    ``(n_samples, n_channels)`` (column 0 = left ear, column 1 = right ear; any
+    further channels are returned unchanged, see ``prepare_signal``).
     """
     try:
         signal, sample_rate = sf.read(str(path), dtype="float64", always_2d=True)
@@ -32,8 +33,8 @@ def load_audio(path):
         # libsndfile messages read "Error opening '<path>': <reason>"; keep the reason
         reason = str(err).rsplit(": ", 1)[-1].rstrip(".")
         raise AudioError("cannot read audio file ({})".format(reason))
-    if signal.shape[1] != 2:
-        raise AudioError("expected 2 channels (binaural left/right), found {}"
+    if signal.shape[1] < 2:
+        raise AudioError("expected at least 2 channels (binaural left/right), found {}"
                          .format(signal.shape[1]))
     if signal.shape[0] == 0:
         raise AudioError("file contains no samples")
@@ -83,6 +84,10 @@ def prepare_signal(path):
     """
     warnings = []
     signal, sample_rate = load_audio(path)
+    if signal.shape[1] > 2:
+        warnings.append("{} channels; used only the first 2 (left/right)"
+                        .format(signal.shape[1]))
+        signal = signal[:, :2]
     if sample_rate != SAMPLE_RATE:
         warnings.append("resampled from {} Hz to {} Hz".format(sample_rate, SAMPLE_RATE))
         signal = resample(signal, sample_rate)
