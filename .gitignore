@@ -8,5 +8,7 @@ __pycache__/
 weights/
 *.tfrecords
 
-# Paper PDF (publisher copyright; cite via doi:10.1038/s41562-021-01244-z)
-*.pdf
+# Binaries and output data
+**/*.pdf
+**/*.wav
+**/*.csv
